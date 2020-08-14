@@ -78,9 +78,8 @@ static byte _function_Convert_DMS2D_( Variables *_vars, double *args, double *re
   _vars->mathError = _ERROR_;
   bool negative = args[0] < 0.0;
   double tmp = negative? -args[0]: args[0];
-  tmp /= 100.0;
-  double d = floor( tmp);
-  tmp = (tmp-d) * 100.0;
+  double d = floor( tmp/100.0);
+  tmp -= d*100.0;
   if( tmp>=60.0){
     if( isRPN) _vars->setScrMessage( FUN_Error_Argument);
     return _REQUEST_REDRAW_MSG; 
@@ -197,4 +196,12 @@ static byte _function_Convert_SM2SFT_( Variables *_vars, double *args, double *r
 
 static byte _function_Convert_SFT2SM_( Variables *_vars, double *args, double *rets, bool isRPN){
   return _vars->_convert1_( args, rets, isRPN, 10.763910416709722);
+}
+
+static byte _function_Convert_R2D_( Variables *_vars, double *args, double *rets, bool isRPN){
+  return _vars->_convert1_( args, rets, isRPN, 57.29577951);
+}
+
+static byte _function_Convert_D2R_( Variables *_vars, double *args, double *rets, bool isRPN){
+  return _vars->_convert1_( args, rets, isRPN, 1.74532925199e-2);
 }

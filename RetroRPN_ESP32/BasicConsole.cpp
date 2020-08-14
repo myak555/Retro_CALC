@@ -10,7 +10,7 @@
 
 //#define __DEBUG
 
-const char BAS_StatusMessage[] PROGMEM = "BASIC Ready";
+const char Basic_Error_Unknown[] PROGMEM = "Unknown:";
 
 //
 // Inits console
@@ -43,7 +43,7 @@ void BasicConsole::show(){
   _lcd->wordWrap = false;
   _lcd->scrollLock = true;
   _lcd->clearScreen( _SP_, false);
-  _mbox->setLabel(BAS_StatusMessage, false);
+  _lex->resetMessageBox();
   _mbox->show();
   _clb->show();
   redraw();
@@ -144,19 +144,18 @@ void BasicConsole::processInput( bool silent) {
   _iom->sendLn();
   #endif
   _clb->copyToPrevious();
-  _lex->parse(_clb->getInput()); 
+  _lex->parseInteractive(_clb->getInput()); 
   switch(_lex->result){
     case _RESULT_STRING_:
       Serial.println("Console: String");
-      if( _epar->lastMathFunction != NULL) break;
+      if( _epar->lastFunctionFound != NULL) break;
       _evaluateString();
       return; 
     case _RESULT_EXECUTED_:
       Serial.println("Console: Executed");
       break;
     case _RESULT_UNDEFINED_:
-      // TODO: Message
-      Serial.println("Console: Result is Undefined");
+      _mbox->setLabel(Basic_Error_Unknown);
       break;
     default:
       Serial.println("Console: Push result to stack");
@@ -177,22 +176,16 @@ void BasicConsole::processInput( bool silent) {
 //
 void BasicConsole::_evaluateString(){
   byte *ptr;
-  if( IsToken( _epar->nameParser.Name(), "cls", false)){
+  if( IsToken( _epar->Name(), "cls", false)){
     // TODO: add screen clear
     _clb->clearInput();
     return;
   }
-  if( IsToken( _epar->nameParser.Name(), "hex", false)){
+  if( IsToken( _epar->Name(), "hex", false)){
     ptr = _clb->getInput();
     _epar->numberParser.stringHex( _vars->getRPNRegister(), ptr);
     _clb->processEND();
     _iom->sendStringLn( ptr);
-    return;
-  }
-  if( IsToken( _epar->nameParser.Name(), "inj", false)){
-    _epar->numberParser.stringValue( _vars->getRPNRegister(), _io_buffer);
-    _iom->injectKeyboard();
-    _clb->clearInput();
     return;
   }
   if( IsToken( _epar->_getCurrentPosition(), "#scr off", false)){

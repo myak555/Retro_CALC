@@ -15,6 +15,8 @@
 #define RPN_PI            3.14159265359
 #define NEAR_ZERO         1.0e-100
 #define CURRENT_DIR_LEN   255
+#define CURRENT_FILE_LEN  255
+#define LIST_LEN          64 
 
 #define VARTYPE_NONE      0
 #define VARTYPE_NUMBER    1
@@ -49,12 +51,20 @@ class Variables{
     size_t _standard_bottom = 0;
     size_t _const_top = VARIABLE_SPACE;
     size_t _standard_top = VARIABLE_SPACE;
+    size_t _newNamePosition = 0;
+    size_t _newStringPosition = 0;
     byte *_buffer = NULL;
     char *currentDir;
+    char *currentFile;
     byte *scrMessage;
     byte *rpnLabelX;
     byte *rpnLabelY;
     byte *rpnLabelZ;
+
+    // Rudimentary data list for backward compatibility
+    double dataList[LIST_LEN];
+    byte listWritePosition = 0;
+    byte listReadPosition = 0;
 
     // 1-D statistical
     double *nmean;
@@ -98,11 +108,11 @@ class Variables{
     uint16_t getColumnSize( VariableToken vt);
     inline bool isConstant( VariableToken vt){ return vt>_const_top;};
     inline bool isReadOnly( VariableToken vt){
-        if( vt-2 <=_read_only_bottom) return true;
+        if( vt-2 <_read_only_bottom) return true;
         return vt>_standard_top;};
     inline bool isUnremovable( VariableToken vt){
         if( vt < 2) return true; 
-        if( vt-2 <=_standard_bottom) return true;
+        if( vt-2 <_standard_bottom) return true;
         return vt > _standard_top;};
     byte nameEndsWith( VariableToken vt);
     bool isNameBASICReal( VariableToken vt);
@@ -130,6 +140,10 @@ class Variables{
     byte *stringValue( VariableToken vt);
     inline uint16_t getPrgCounter(){ return (uint16_t)(_prgCounter[0]);};
     inline void setPrgCounter(uint16_t ln){ _prgCounter[0] = (int64_t)ln;};
+    void appendToData( double value);
+    inline void clearData(){listWritePosition = 0;};
+    double readData();
+    inline void restoreReadPosition(){ listReadPosition = 0;};
 
     //
     // Looks for constants and variables
@@ -233,7 +247,18 @@ class Variables{
             _RPN_Mantra_( value, pops):
             _nonRPN_Mantra_( value, rets);};
 
+    //
+    // Helps in name and string parsing
+    //
+    byte *startNewName();
+    void addCharToNewName( byte *ptr);
+    void startNewValue();
+    void addCharToNewValue( byte *ptr);
+    byte *getNewNamePtr();
+    VariableToken convertNameToVar(  byte varType=VARTYPE_NUMBER);
+
   private:
+    byte _dummyString[1];
     Keywords *_kwds;
     double *_rpnStack = NULL;
     double *_prev = NULL;

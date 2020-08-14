@@ -17,47 +17,71 @@
 
 class Lexer{
   public:
-    byte currentUI = UI_UNDEFINED;
+    bool isRunning = false;
+    byte currentUI = UI_RPNCALC;
     byte nextUI = UI_UNDEFINED;
     Keyword *lastKeyword = NULL;
     VariableToken lastVariable = 0;
     byte result = _RESULT_UNDEFINED_;
+
     void init( void *components[]);
+    inline unsigned long tick(){ return millis();};
+
     byte *parse( byte *str);
+    inline byte *parseInteractive( byte *str){
+      return parse( str);
+    };
+
+    void loadState();
+    void saveState();
+    void readBASICConstantFile(const char *name);
+    void resetMessageBox();
 
     // Operator declarations here
     bool operator_AMODE();
+    bool operator_APPEND();
 
     bool operator_CLEAR();
     bool operator_CLEAR_Program();
     bool operator_CLEAR_Vars( bool constants);
-
     bool operator_CONST();
 
-    bool operator_LET();
+    bool operator_DATA();
+    bool operator_DELETE();
+    bool operator_DIM();
+    bool operator_DIR();
+    bool operator_DIRECTORY();
+    bool operator_INJ();
 
+    bool operator_LET();
     bool operator_LIST();
     bool operator_LIST_Program();
     bool operator_LIST_Vars( bool constants);
-
     bool operator_LOAD();
-    bool operator_LOAD_Program();
-    bool operator_LOAD_Vars( bool constants);
 
     bool operator_MEM();
+    bool operator_MKDIR();
 
-    bool operator_REM();
+    bool operator_NEW();
 
     bool operator_PUSH();
 
+    bool operator_REM();
+    bool operator_RESTORE();
+    bool operator_RESTORE_Vars(bool remove);
+    bool operator_RESTORE_Const(bool remove);
     bool operator_RUN();
 
+    bool operator_SAVE();
     bool operator_STORE();
-    bool operator_STORE_Vars( bool constants);
-
+    bool operator_STORE_Vars();
+    bool operator_STORE_Vars( const char *name);
+    bool operator_STORE_Const();
+    bool operator_STORE_Const( const char *name);
     bool operator_SUM();
-
     bool operator_SUMXY();
+
+    bool operator_TYPE();
 
     inline byte *_getCurrentPosition(){
       return _lexer_position;
@@ -81,24 +105,34 @@ class Lexer{
     MessageBox *_mbox;
     CommandLine *_clb;
 
-    bool _expression_error = false;
+    bool _lexer_error = false;
     byte *_lexer_position;
+    byte *_stop_list_position;
     double _listValues[10];
-
-    void _parseOperator();
-    bool _processKeyword();
-    bool _processRPNKeyword( Keyword *kwd);
-    bool _processVariable( bool asConstant=false);
-    bool _findAssignment();
-    bool _validate_NextCharacter( byte c);
 
     inline void _ignore_Blanks(){
       while(IsSpacer(*_lexer_position))
         _lexer_position++;
     };
+
+    //byte *_bracket_Check();
+
+    void _parseOperator();
+    bool _processKeyword();
+    bool _processRPNKeyword( Keyword *kwd);
+    bool _processExistingVariable();
+    bool _processNewVariable( bool asConstant);
+
+    bool _findAssignment();
+    int8_t _evaluateIndexBrackets();
+    bool _validate_NextCharacter( byte c);
+
     bool _check_NextToken( byte c);
     bool _peek_NextToken( byte c);
     byte _parseList( byte maxVal=10);
+
+    void _loadBASICFile( const char *name, bool ignoreErrors);
+    void _saveBASICFile( const char *name, bool ignoreErrors);
 };
 
 #endif // _LEXER_HPP

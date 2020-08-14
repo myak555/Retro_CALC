@@ -42,6 +42,7 @@ const char _VAR_Offset[] PROGMEM = "Offset";
 
 const char _VAR_lcdPWM[] PROGMEM = "lcdPWM%";
 const char _VAR_current_dir[] PROGMEM = "current_dir$";
+const char _VAR_current_file[] PROGMEM = "current_file$";
 const char _VAR_scrMessage[] PROGMEM = "scrMessage$";
 const char _VAR_rpnLabelX[] PROGMEM = "rpnLabelX$";
 const char _VAR_rpnLabelY[] PROGMEM = "rpnLabelY$";
@@ -65,8 +66,10 @@ const char _CON_varMemory[] PROGMEM = "varMemory%";
 const char _CON_prgMemory[] PROGMEM = "prgMemory%";
 
 const char SD_root2[] PROGMEM = "/";
+const char SD_default_file[] PROGMEM = "/autotest.bas";
 
 void Variables::init( void *components[]){
+  _dummyString[0] = _NUL_;
   _buffer = (byte *)malloc( VARIABLE_SPACE);
   _kwds = (Keywords *)components[UI_COMP_Keywords];
 
@@ -88,6 +91,8 @@ void Variables::init( void *components[]){
   offset = (double *)_getDataPtr( _placeNumber( false, _VAR_Offset, 0.0));
   currentDir = (char *)_getDataPtr( _placeString( false,
       _VAR_current_dir, CURRENT_DIR_LEN, SD_root2));
+  currentFile = (char *)_getDataPtr( _placeString( false,
+      _VAR_current_file, CURRENT_FILE_LEN, SD_default_file));
   scrMessage = _getDataPtr( _placeString( false, _VAR_scrMessage, SCR_COLS));
   rpnLabelX = _getDataPtr( _placeString( false, _VAR_rpnLabelX, SCR_COLS));
   rpnLabelY = _getDataPtr( _placeString( false, _VAR_rpnLabelY, SCR_COLS));
@@ -359,8 +364,18 @@ VariableToken Variables::getOrCreateNumber( bool asConstant, byte *name){
 }
 
 void Variables::_removeVariable( VariableToken vt){
+  #ifdef __DEBUG
+  Serial.print( "Remove variable called: ");
+  Serial.println( vt);
+  #endif
   VariableToken vt2 = _getNextVar( vt);
-  if( vt2>_var_bottom){
+  #ifdef __DEBUG
+  Serial.print( "Next variable: ");
+  Serial.println( vt2);
+  Serial.print( "_var_bottom: ");
+  Serial.println( _var_bottom);
+  #endif
+  if( vt2>_var_bottom){ // this is the last variable
     _var_bottom = vt-2;
     return;
   } 
@@ -385,13 +400,32 @@ void Variables::_removeConstant( VariableToken vt){
   return;
 }
 void Variables::removeByToken( VariableToken vt){
+  #ifdef __DEBUG
+  Serial.print( "Remove called: ");
+  Serial.println( vt);
+  Serial.print( "Standard bottom: ");
+  Serial.print( _standard_bottom);
+  Serial.print( " variable bottom: ");
+  Serial.println( _var_bottom);
+  #endif
   if( isUnremovable( vt)) return; // read-only constant or unremovable variable
+  #ifdef __DEBUG
+  Serial.println( "It is removable!");
+  #endif
   if( isConstant( vt)) _removeConstant( vt);
   else _removeVariable(vt);
   *_varAvailble = (int64_t)getMemoryAvailable();
 }
 void Variables::removeByName( const char *name){
+  #ifdef __DEBUG
+  Serial.print( "Remove by name called: ");
+  Serial.println( name);
+  #endif
   VariableToken vt = findByName(name);
+  #ifdef __DEBUG
+  Serial.print( "Token found: ");
+  Serial.println( vt);
+  #endif
   removeByToken( vt);
 }
 
@@ -426,6 +460,79 @@ double Variables::getUnconvertedAngle( double a){
 }
 const char *Variables::getAMODEString(){
   return _RPN_AMODE_Table[ getAngleMode()];
+}
+
+void Variables::appendToData( double value){
+  dataList[listWritePosition] = value;
+  if( listWritePosition < LIST_LEN) listWritePosition++;
+}
+
+double Variables::readData(){
+  if( listReadPosition>=listWritePosition) return 0.0;
+  return dataList[listReadPosition++];
+}
+
+byte *Variables::startNewName(){
+  _newNamePosition = _var_bottom + 2;
+  if( _newNamePosition >= _const_top - 2) return NULL; // protect the constants
+  byte *tmp = _buffer + _newNamePosition;
+  *tmp = _NUL_;
+  return tmp;
+}
+
+void Variables::addCharToNewName( byte *ptr){
+  if( _newNamePosition < _var_bottom + 2) return; // protect the current stack
+  if( _newNamePosition >= _const_top - 2) return; // protect the constants
+  _buffer[ _newNamePosition++] = *ptr;
+  _buffer[ _newNamePosition] = _NUL_;
+}
+
+void Variables::startNewValue(){
+  if( _newNamePosition < _var_bottom + 2) _newStringPosition = _var_bottom + 2;
+  else _newStringPosition = _newNamePosition + 1 + sizeof( uint16_t);
+}
+
+void Variables::addCharToNewValue( byte *ptr){
+  if( _newStringPosition < _var_bottom + 2) return;
+  if( _newStringPosition >= _const_top - 2) return;
+  _buffer[ _newStringPosition++] = *ptr;
+  _buffer[ _newStringPosition] = _NUL_;
+}
+
+byte *Variables::getNewNamePtr(){
+  if( _newNamePosition < _var_bottom + 2) return _dummyString;
+  if( _var_bottom  >= _const_top - 4) return _dummyString;
+  return _buffer + _var_bottom + 2;
+}
+
+// the variable name is already placed in memory
+VariableToken Variables::convertNameToVar( byte varType){
+  byte *ptr = getNewNamePtr();
+  #ifdef __DEBUG
+  Serial.print( "Converting name to var: ");
+  Serial.println( (char*)ptr);
+  #endif
+  size_t nameLen = strlen( ptr);
+  if( nameLen<=0) return 0;
+  if( nameLen>255){
+    nameLen = 255;
+    ptr[nameLen] = _NUL_;
+  } 
+
+  // TODO: modify for strings and arrays
+  uint16_t varLen = _getVarLength( nameLen, varType);
+  #ifdef __DEBUG
+  Serial.print("Expect length: ");
+  Serial.println( varLen);
+  #endif
+  VariableToken vt = _var_bottom + 2;
+  _buffer[_var_bottom] = varType;
+  _buffer[_var_bottom+1] = (byte)nameLen;
+  size_t tmp = _var_bottom + varLen;
+  if( tmp+2 >= _const_top) return 0; // out of memory
+  _var_bottom = tmp;
+  setValueReal( vt, 0.0);
+  return vt;
 }
 
 //
@@ -559,7 +666,7 @@ VariableToken Variables::_placeString( bool isConst,
   uint16_t *ptr = (uint16_t *)_getVarBlockPtr( vt);
   *ptr++ = length;
   char *dataPtr = (char *)ptr;
-  if( value) strncat2( dataPtr, value, length);
+  if( value) strncat2( dataPtr, value, length-1);
   else *dataPtr = _NUL_;
   return vt;
 }
@@ -593,7 +700,7 @@ void Variables::clearRPNSumXY(){
 }
 
 void Variables::addSample2RPNSum( double v){
-  Serial.println("Sum called");
+  //Serial.println("Sum called");
   double pMean = *mean;
   *nmean += 1.0;
   *mean += (v - *mean) / (*nmean);
@@ -688,7 +795,8 @@ byte Variables::_RPN_Mantra_( double value, byte pops){
   for( byte i=0; i<pops; i++) popRPNStack();
   _rpnStack[0] = value;
   mathError = _NO_ERROR_;
-  return _REQUEST_DO_IOM + (pops? 3: 1);
+  //return _REQUEST_DO_IOM + (pops? 3: 1);
+  return _REQUEST_RESET_LABELS + (pops? 3: 1);  
 }
 byte Variables::_nonRPN_Mantra_( double value, double *rets){
   if( isnan(value)) return _REQUEST_REDRAW_MSG;

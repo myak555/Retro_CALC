@@ -22,8 +22,6 @@
 
 #include "./src/Lexer.hpp"
 
-#define INPUT_COLS    256
-#define INPUT_LIMIT   255
 #define HSCROLL_LIMIT  18
 
 // Move must be one less than RPN_STACK times sizeof( double)
@@ -38,8 +36,6 @@ class RPNCalculator{
     void redraw();
     void sendChar( byte c);
     void processInput( bool silent=false);
-    void loadState();
-    void saveState();
     void updateIOM( bool refresh=true);
   private:
     byte *_io_buffer;

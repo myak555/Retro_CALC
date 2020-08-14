@@ -6,14 +6,14 @@
 //
 //////////////////////////////////////////////////////////
 
-#include "FileManager.hpp"
+#include "Editor.hpp"
 
 //#define __DEBUG
 
 //
-// Inits File Manager 
+// Inits console
 //
-unsigned long FileManager::init(void *components[]){
+unsigned long Editor::init(void *components[]){
   _iom = (IOManager *)components[UI_COMP_IOManager];
   _vars = (Variables *)components[UI_COMP_Variables];
   _funs = (Functions *)components[UI_COMP_Functions];
@@ -30,14 +30,14 @@ unsigned long FileManager::init(void *components[]){
   return _iom->keepAwake();
 }
 
-unsigned long FileManager::tick(){
+unsigned long Editor::tick(){
   char c = _iom->input();
   if(c != _NUL_)
     sendChar((byte)c);
   return _iom->lastInput;
 }
 
-void FileManager::show(){
+void Editor::show(){
   _lcd->wordWrap = false;
   _lcd->scrollLock = true;
   _lcd->clearScreen( _SP_, false);
@@ -50,7 +50,7 @@ void FileManager::show(){
 //
 // Redraws the text area on LCD
 //
-void FileManager::redraw() {
+void Editor::redraw() {
 //  byte lineNums[] = {6, 4, 2, 0};
   _sdm->checkSDStatus();
 //  for(byte i=0; i<4; i++){
@@ -77,7 +77,7 @@ void FileManager::redraw() {
 //
 // Draws the line to the serial ports
 //
-void FileManager::updateIOM( bool refresh) {
+void Editor::updateIOM( bool refresh) {
 //  if( !refresh) return;
 //  _iom->sendLn();
 //  for( byte i=3; i>0; i--){
@@ -94,7 +94,7 @@ void FileManager::updateIOM( bool refresh) {
 //
 // Sends one byte
 //
-void FileManager::sendChar( byte c) {
+void Editor::sendChar( byte c) {
   switch(c){
     // _LF_ and _RPN are ignored
     case _LF_:
@@ -133,7 +133,7 @@ void FileManager::sendChar( byte c) {
 //
 // Parses line and performs operation
 //
-void FileManager::processInput( bool silent) {
+void Editor::processInput( bool silent) {
   #ifdef __DEBUG
   Serial.print("Processing Input: [");
   Serial.print( (char *)_clb->getInput());
@@ -173,7 +173,7 @@ void FileManager::processInput( bool silent) {
 // Process other string commands, such as "hex" 
 // This is a kludge! TODO 
 //
-void FileManager::_evaluateString(){
+void Editor::_evaluateString(){
   byte *ptr;
   if( IsToken( _epar->nameParser.Name(), "cls", false)){
     // TODO: add screen clear

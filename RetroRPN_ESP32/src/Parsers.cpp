@@ -436,12 +436,106 @@ inline byte NameParser::VarType(){
 }
 
 //
+// Gets the filename string into list memory
+//
+byte *FilenameParser::parse( byte *str){
+  _reset_name();
+  _locateTerminator( str);
+  if( !IsOperatorTerm( *_parser_end)) return _parser_start;
+  size_t len = _parser_end - _parser_start;
+  if( len == 0 ) return _parser_start;
+  #ifdef __DEBUG
+  Serial.print("Given: ");
+  Serial.println( (char*)str);
+  #endif 
+
+  // absolute directory
+  if( *_parser_start == '/'){
+    strncat2( (char*)_name, (const char *)_parser_start, INPUT_COLS+1);
+    #ifdef __DEBUG
+    Serial.print("Absolute name: ");
+    Serial.println( (char*)_name);  
+    #endif 
+    result = true;
+    return _parser_end;
+  }
+
+  // Not absolute - start from existing
+  strncat2( (char*)_name, (const char *)_vars->currentDir, INPUT_COLS-1);
+
+  // up one directory
+  if( IsToken( _parser_start, "../", false)){
+    while( IsToken( _parser_start, "../", false)){
+      _backpedalDirectory();
+      _parser_start += 3;
+    }
+  }
+
+  // up one directory
+  if( IsToken( _parser_start, "..", true)){
+    _backpedalDirectory();
+    _parser_start = _parser_end;
+  }
+
+  // use the same directory
+  if( IsToken( _parser_start, "./", false)){
+    _parser_start += 2;
+  }
+
+  len = _parser_end - _parser_start;
+  if( len == 0 ){
+    result = true;
+    return _parser_start;
+  }
+  int l2 = strlen(_name);
+  if( l2<=0 || _name[l2-1] != '/') strcat( (char*)_name, "/");
+  len += l2;
+  strncat( (char*)_name, (const char *)_parser_start, INPUT_COLS - len);
+  #ifdef __DEBUG
+  Serial.print("Name set to: ");
+  Serial.println( (char*)_name);
+  #endif
+  result = true;
+  return _parser_end;
+}
+
+//
+// Locates a valid terminator for filename
+//
+void FilenameParser::_locateTerminator( byte *start){
+  _parser_start = start;
+  _parser_end = _parser_start;
+  if( !IsFilenameStarter( *_parser_end)) return;
+  while( IsFilenameCharacter( *_parser_end )) _parser_end++;
+}
+
+//
+// Locates a previous directory marker and chops the string at it
+//
+void FilenameParser::_backpedalDirectory(){
+  #ifdef __DEBUG  
+  Serial.println( "Directory before: ");
+  Serial.println( (char *)_name);
+  #endif
+  int16_t end = strlen( _name)-1;
+  if( end>0 && _name[end] == '/') end--;
+  while( end>0 && _name[end] != '/') end--;
+  if( end<=0) return;
+  _name[end] = _NUL_;
+  #ifdef __DEBUG  
+  Serial.println( "Directory after backpedal:");
+  Serial.println( (char *)_name);
+  #endif  
+}
+
+//
 // Inits ExpressionParser
 //
 void ExpressionParser::init(void *components[]){
   _kwds = (Keywords *)components[UI_COMP_Keywords];
   _vars = (Variables *)components[UI_COMP_Variables];
   _funs = (Functions *)components[UI_COMP_Functions];
+  filenameParser.init( _vars);
 }
 
 //
@@ -496,9 +590,87 @@ bool ExpressionParser::_parse_ListMember( byte terminator){
 }
 
 //
-// Main parsing entry
+// Main parsing entry for name expression
+// Attempts to parse a name, such as an identifier
+// The pointer returned is past the name if valid
+// or at the origin if not parsed correctly
 //
-byte *ExpressionParser::parse(byte *str){
+byte *ExpressionParser::parseName( byte *str){
+  #ifdef __DEBUG
+  Serial.print("Name parsing: [");
+  Serial.print((char*)str);
+  Serial.println("]");
+  #endif
+  result = _RESULT_UNDEFINED_;
+  lastFunctionFound = NULL;
+  lastKeywordFound = NULL;
+  byte *newName = _vars->startNewName();
+  if( newName == NULL){
+    Serial.println( "No memory");
+    return str; // TODO: not enough memory
+  }
+  byte *ptr = str;
+  
+  // skip empty space
+  while( IsSpacer(*ptr)) ptr++;
+  if( !IsNameStarter(*ptr)){
+    #ifdef __DEBUG
+    Serial.print( "Not a name starter: ");
+    Serial.println( (char *)ptr);
+    #endif
+    return ptr;
+  }
+  str = ptr;
+
+  while( IsNameCharacter(*ptr)){
+    _vars->addCharToNewName( ptr++);
+
+    // dollar or percent must be the last character
+    if( *ptr == _DOLLAR_ || *ptr == _PERCENT_){
+      _vars->addCharToNewName( ptr++);
+      break;
+    }
+  }
+  if( *ptr != _NUL_ && !IsNameTerm( *ptr)) return str;
+
+  #ifdef __DEBUG
+  Serial.print( "Extracted name: ");
+  Serial.println( (char *)newName);
+  #endif
+
+  lastKeywordFound = _kwds->findByName( newName);
+  lastFunctionFound = _funs->findByKeyword( newName, lastKeywordFound);
+  #ifdef __DEBUG
+  if( lastKeywordFound != NULL){
+    Serial.print( "Keyword located: ");
+    Serial.print( lastKeywordFound->id);
+    Serial.print( " : ");
+    Serial.println( lastKeywordFound->name0);
+  }
+  if( lastFunctionFound != NULL){
+    Serial.print( "Function located: ");
+    Serial.print( lastFunctionFound->id);
+    Serial.print( " : ");
+    Serial.println( lastFunctionFound->kwid);
+  }
+  #endif
+
+  // This is a perforlmance trick, based on the sequence:
+  // #define _RESULT_NEW_VAR_        5 // lastFunctionFound == NULL && kw == NULL 
+  // #define _RESULT_KEYWORD_        6 // lastFunctionFound == NULL && kw != NULL
+  // #define _RESULT_EXISTING_VAR_   7 // lastFunctionFound != NULL && kw == NULL
+  // #define _RESULT_FUNCTION_NAME_  8 // lastFunctionFound != NULL && kw != NULL
+ 
+  result = _RESULT_NEW_VAR_;
+  result += (lastKeywordFound == NULL)? 0: 1;
+  result += (lastFunctionFound == NULL)? 0: 2;
+  return ptr;
+}
+
+//
+// Main parsing entry for algebraic expression
+//
+byte *ExpressionParser::parseAlgebraic(byte *str){
   #ifdef __DEBUG
   Serial.print("Parsing: [");
   Serial.print((char*)str);
@@ -528,6 +700,21 @@ byte *ExpressionParser::parse(byte *str){
   //_parse_Expression_Power();
   if( _expression_error) result = _RESULT_UNDEFINED_;
   return _parser_position;
+}
+
+byte *ExpressionParser::setVarAlgebraic( VariableToken vt, byte *str, uint16_t i, uint16_t j){
+  byte *ptr = parseAlgebraic( str);
+  switch( result ){
+    case _RESULT_INTEGER_:
+      _vars->setValueInteger( vt, numberParser.integerValue(), i, j);
+      break;
+    case _RESULT_REAL_:
+      _vars->setValueReal( vt, numberParser.realValue(), i, j);
+      break;
+    default:
+      break;
+  }
+  return ptr;
 }
 
 //
@@ -804,8 +991,8 @@ byte *ExpressionParser::_parse_Expression_Value(){
     Serial.print("Keyword found (0): ");
     Serial.println((char *)nameParser.Name());
     #endif
-    lastMathFunction = _funs->getFunction(nameParser.Name());
-    if( lastMathFunction == NULL){
+    lastFunctionFound = _funs->findByName(nameParser.Name());
+    if( lastFunctionFound == NULL){
       #ifdef __DEBUG
       Serial.println("This name is indefined!");
       #endif
@@ -814,17 +1001,17 @@ byte *ExpressionParser::_parse_Expression_Value(){
     }
     #ifdef __DEBUG
     Serial.print("Function keyword found: ");
-    Serial.println( (char *)_kwds->getKeywordById( lastMathFunction->kwid)->name0);
+    Serial.println( (char *)_kwds->findById( lastFunctionFound->kwid)->name0);
     #endif
-    Function *mfptr = lastMathFunction; // could be a recursive call!
+    Function *mfptr = lastFunctionFound; // could be a recursive call!
     double _args[3]; // kept on system stack
-    if(_parse_FunctionArguments(lastMathFunction, _args)){
+    if(_parse_FunctionArguments(lastFunctionFound, _args)){
       result = _RESULT_STRING_;
       return _parser_position;
     }
     #ifdef __DEBUG
     Serial.print("Argument(s):");
-    for( byte i=0; i<lastMathFunction->nArgs; i++){
+    for( byte i=0; i<lastFunctionFound->nArgs; i++){
       Serial.print(" ");
       Serial.print(_args[i]);
     }

@@ -10,7 +10,6 @@
 
 //#define __DEBUG
 
-const char RPN_StatusMessage[] PROGMEM = "RPN Ready";
 const char RPN_Error_NAN[] PROGMEM = "Err: NaN";
 const char RPN_Error_Unknown[] PROGMEM = "Unknown:";
  
@@ -30,7 +29,6 @@ unsigned long RPNCalculator::init(void *components[]){
   _clb = (CommandLine *)components[UI_COMP_CommandLine];
   _io_buffer = _iom->getIOBuffer();
   _rsb->resetRPNLabels();
-  loadState();
   _rsb->setStackRedrawAll();
   return _iom->keepAwake();
 }
@@ -44,7 +42,7 @@ unsigned long RPNCalculator::tick(){
 
 void RPNCalculator::show(){
   _rsb->show();
-  _mbox->setLabel(RPN_StatusMessage, false);
+  _lex->resetMessageBox();
   _mbox->show();
   _clb->show();
 }
@@ -117,7 +115,7 @@ void RPNCalculator::sendChar( byte c) {
       return;
     case _ESC_:
       _clb->processESC();
-      _mbox->setLabel(RPN_StatusMessage, false);
+      _lex->resetMessageBox();
       _rsb->resetRPNLabels();
       updateIOM(true);
       return;
@@ -168,7 +166,11 @@ void RPNCalculator::_processCommand(byte c){
     default:
       break;
   }
-  _lex->parse(_clb->getInput());
+  #ifdef __DEBUG
+  Serial.println("Parse interactive (command):");
+  Serial.println((char*)_clb->getInput());
+  #endif
+  _lex->parseInteractive(_clb->getInput());
   switch(_lex->result){
     case _RESULT_INTEGER_  :
     case _RESULT_REAL_     :
@@ -212,7 +214,11 @@ void RPNCalculator::processInput( bool silent) {
     return;
   }
   _clb->copyToPrevious();
-  _lex->parse(_clb->getInput()); 
+  #ifdef __DEBUG
+  Serial.println("Parse interactive (input):");
+  Serial.println((char*)_clb->getInput());
+  #endif
+  _lex->parseInteractive(_clb->getInput()); 
   switch(_lex->result){
     case _RESULT_INTEGER_:
     case _RESULT_REAL_:
@@ -225,7 +231,7 @@ void RPNCalculator::processInput( bool silent) {
       #ifdef __DEBUG
       Serial.println("String result");
       #endif
-      if( _epar->lastMathFunction != NULL) break;
+      if( _epar->lastFunctionFound != NULL) break;
       _evaluateString();
       return; 
     case _RESULT_EXECUTED_:
@@ -237,7 +243,6 @@ void RPNCalculator::processInput( bool silent) {
       #ifdef __DEBUG
       Serial.println("Undefined result");
       #endif
-      //_mbox->setLabel( RPN_StatusMessage, true);
       //_mbox->setLabel( RPN_Error_NAN, true);
       return;
     default:
@@ -251,51 +256,24 @@ void RPNCalculator::processInput( bool silent) {
 }
 
 //
-// TODO: load and save functionality here
-//
-void RPNCalculator::loadState(){
-  if( !_sdm->SDMounted) return;
-  _sdm->readRPNStatus(_clb->_input, _clb->_inputPrevious, &(_clb->cursor_column));
-  #ifdef __DEBUG
-  Serial.print("loaded: [");
-  Serial.print( (char*)_clb->_input);
-  Serial.println("]");
-  #endif
-}
-
-void RPNCalculator::saveState(){
-  if( !_sdm->SDMounted) return;
-  _sdm->writeRPNStatus(_clb->_input, _clb->_inputPrevious, _clb->cursor_column);
-  //_clb->
-  //  uint16_t _clb->cursor_column = 0;
-  //  uint16_t _clb->display_starts = 0;
-  //  byte _clb->_input[INPUT_COLS];
-  //  byte _clb->_inputPrevious[INPUT_COLS];
-}
-
-//
 // Process sume unimplemented string commands, such as "hex"
 // This is a kludge! TODO 
 //
 void RPNCalculator::_evaluateString(){
   byte *ptr;
-  if( IsToken( _epar->nameParser.Name(), "cls", false)){
+  //if( IsToken( _epar->nameParser.Name(), "cls", false)){
+  if( IsToken( _epar->Name(), "cls", false)){
     _rsb->resetRPNLabels();
     _clb->clearInput();
     updateIOM(true);
     return;
   }
-  if( IsToken( _epar->nameParser.Name(), "hex", false)){
+  //if( IsToken( _epar->nameParser.Name(), "hex", false)){
+  if( IsToken( _epar->Name(), "hex", false)){
     ptr = _clb->getInput();
     _epar->numberParser.stringHex( _vars->getRPNRegister(), ptr);
     _clb->processEND();
     _iom->sendStringLn( ptr);
-    return;
-  }
-  if( IsToken( _epar->nameParser.Name(), "inj", false)){
-    _epar->numberParser.stringValue( _vars->getRPNRegister(), _io_buffer);
-    _iom->injectKeyboard();
-    _clb->clearInput();
     return;
   }
   if( IsToken( _epar->_getCurrentPosition(), "#scr prompt ", false)){

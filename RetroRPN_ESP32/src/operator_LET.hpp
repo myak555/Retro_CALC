@@ -10,7 +10,7 @@
 //#include "Lexer.hpp"
 
 //
-// Creates a constant
+// Creates a variable
 //
 static bool _operator_LET_( Lexer *lex){
   return lex->operator_LET();
@@ -39,7 +39,7 @@ bool Lexer::operator_LET(){
      return true;
   }
   // parse expression
-  _lexer_position = _epar->parse(_lexer_position);
+  _lexer_position = _epar->parseAlgebraic(_lexer_position);
   switch( _epar->result ){
     case _RESULT_INTEGER_:
       _vars->setValueInteger( lastVariable, _epar->numberParser.integerValue());

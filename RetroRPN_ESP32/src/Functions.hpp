@@ -31,7 +31,8 @@ class Functions{
     double _rets[NMATH_RETURNS];
 
     void init( void *components[]);
-    Function *getFunction(byte *str);
+    Function *findByName(byte *str);
+    Function *findByKeyword(byte *str, Keyword *kwd=NULL);
     byte Compute( Function *mf, double *args);
     byte ComputeRPN( Keyword *kw);
   private:
@@ -44,10 +45,10 @@ class Functions{
     inline void _clearRets(){
       for(byte i=0; i<NMATH_RETURNS; i++)_rets[i] = 0.0; 
     };
-    inline void _setFunction( int16_t id, void *func, int8_t argsN){
-      Keyword *k = _kwds->getKeywordById( id);
+    inline void _setFunction( int16_t id, void *func, int8_t nArgs){
+      Keyword *k = _kwds->findById( id);
       k->operator_ptr = func;
-      k->argumentType = argsN;
+      k->nArgs = nArgs;
     };
 };
 

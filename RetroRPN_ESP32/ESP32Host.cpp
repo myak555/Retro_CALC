@@ -28,6 +28,7 @@ static TerminalBox myTerminalBox;
 static FileManager myFileManager;
 static RPNCalculator myRPNCalculator;
 static BasicConsole myBasicConsole;
+static Editor myEditor;
 
 
 // Damn VSCode does not understand UTF8 !
@@ -83,6 +84,7 @@ unsigned long ESP32Host::init() {
   _host_Components[UI_COMP_FileManager] = &myFileManager;
   _host_Components[UI_COMP_RPNCalculator] = &myRPNCalculator;
   _host_Components[UI_COMP_BasicConsole] = &myBasicConsole;
+  _host_Components[UI_COMP_Editor] = &myEditor;
 
   // Warm-up LCD, show splash, while showing splash, do the rest
   myLCDManager.init(_host_Components);
@@ -113,19 +115,22 @@ unsigned long ESP32Host::init() {
   myTerminalBox.init(_host_Components);
   myFileManager.init(_host_Components);
   myBasicConsole.init(_host_Components);
+  myEditor.init(_host_Components);
   myRPNCalculator.init(_host_Components);
-  mySDManager.loadState();
+  myLexer.loadState();
   
   myLCDManager.waitForEndSplash( initStarted);
 
-  // TODO: remember selector here
-  selectUI(UI_RPNCALC);
+  if( myLexer.currentUI < UI_RPNCALC || myLexer.currentUI > UI_CONSOLE )
+    myLexer.currentUI = UI_RPNCALC;
+  show();
   redraw();
   return myIOManager.keepAwake();
 }
 
 unsigned long ESP32Host::tick() {
   _checkSleepPin();
+  myLexer.tick();
   mySDManager.tick();
   myIOManager.tick();
   myLCDManager.tick();
@@ -137,6 +142,8 @@ unsigned long ESP32Host::tick() {
       myFileManager.tick();
       break;
     case UI_EDITOR:
+      myEditor.tick();
+      break;
     case UI_CONSOLE:
       myBasicConsole.tick();
     default:
@@ -149,8 +156,7 @@ unsigned long ESP32Host::tick() {
   }
   if(dt > SCREEN_OFF_PERIOD){
     // TODO: check here if saving is needed
-    // mySDManager.saveState();
-    // myRPNCalculator.saveState();
+    // myLexer.saveState();
     myLCDManager.sleepOn();
     return myIOManager.lastInput;
   }
@@ -180,7 +186,7 @@ void ESP32Host::selectNextUI(){
 void ESP32Host::selectUI(byte ui){
   if( myLexer.currentUI == ui) return;
   myLexer.currentUI = ui;
-  myCommandLine.clearInput(); // TODO: check if this interferes with Lexer
+  myCommandLine.clearInput();
   show();
 }
 
@@ -193,6 +199,8 @@ void ESP32Host::show(){
       myFileManager.show();
       break;
     case UI_EDITOR:
+      myEditor.show();
+      break;
     case UI_CONSOLE:
       myBasicConsole.show();
       break;
@@ -211,6 +219,8 @@ void ESP32Host::redraw(){
       myFileManager.redraw();
       break;
     case UI_EDITOR:
+      myEditor.redraw();
+      break;
     case UI_CONSOLE:
       myBasicConsole.redraw();
     default:
@@ -228,8 +238,7 @@ void ESP32Host::deepSleep( byte msg){
   delay(500);
   myLCDManager.sleepOn();
   // TODO add calls for saving the system state
-  mySDManager.saveState();
-  myRPNCalculator.saveState();
+  myLexer.saveState();
   delay(1000); // finish card activity
   mySDManager.sleepOn();
   myIOManager.sleepOn(); // consoles quit the last!

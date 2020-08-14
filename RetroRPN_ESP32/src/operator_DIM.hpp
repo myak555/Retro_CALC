@@ -10,14 +10,14 @@
 //#include "Lexer.hpp"
 
 //
-// Creates a constant
+// Creates an array (vector or matrix)
 //
-static bool _operator_CONST_( Lexer *lex){
-  return lex->operator_CONST();
+static bool _operator_DIM_( Lexer *lex){
+  return lex->operator_DIM();
 }
-bool Lexer::operator_CONST(){
+bool Lexer::operator_DIM(){
   #ifdef __DEBUG
-  Serial.println("CONST called");
+  Serial.println("DIM called");
   Serial.print("Evaluating: |");
   Serial.println((char *)_lexer_position);
   #endif
@@ -26,18 +26,14 @@ bool Lexer::operator_CONST(){
     _skipToNextOperator( ptr);
      return true;
   }
-  lastVariable = _vars->getOrCreateNumber( true, _epar->nameParser.Name());
+  lastVariable = _vars->getOrCreateNumber( false, _epar->nameParser.Name());
   if( lastVariable == 0){
     _mbox->setLabel(LEX_Error_OutOfMemory);
     _skipToNextOperator( _lexer_position);
     return true;
   }
-  if( _vars->isReadOnly(lastVariable)){
-    _skipToNextOperator( _lexer_position);
-    return true;
-  }
   _lexer_position = ptr; // name found, looking for assignment
-  if( !_findAssignment()){ // no assignment take from stack
+  if( !_findAssignment()){ // no assignment, take from stack
     _vars->setValueReal( lastVariable, _vars->getRPNRegister());
     _skipToNextOperator( _lexer_position);
      return true;
@@ -52,7 +48,7 @@ bool Lexer::operator_CONST(){
       _vars->setValueReal( lastVariable, _epar->numberParser.realValue());
       break;
     default:
-      _vars->setValueReal( lastVariable, 0.0);
+      _vars->setValueReal( lastVariable, _vars->getRPNRegister());
       break;
   }
   _skipToNextOperator( _lexer_position);
